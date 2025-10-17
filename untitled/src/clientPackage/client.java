@@ -1,55 +1,57 @@
 package clientPackage;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import operationPackage.Operation;
+
+import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 
 public class Client {
-    public static void main(String[] args) throws IOException {
-        System.out.println("Je suis un client pas encore connecté");
 
-        Socket socket = new Socket("localhost", 12345);
-        System.out.println("Je suis un client connecté");
+    public static void main(String[] args) {
+        try (Socket socket = new Socket("localhost", 12345);
+             Scanner scanner = new Scanner(System.in)) {
 
-        Scanner scanner = new Scanner(System.in);
+            System.out.println("Client connecté au serveur.");
 
-        while (true) {
-            String operation = effectuerOperation(scanner);
-            envoyerOperation(operation, socket);
+            ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+            out.flush();
+            ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            System.out.println("Voulez-vous faire une autre opération ? (1 = oui / 2 = non)");
-            String reponse = scanner.nextLine().trim(); 
+            while (true) {
+                System.out.println("Donnez l'opération (ex: 5*3) :");
+                String input = scanner.nextLine().replaceAll("\\s+", "");
 
-            if (!reponse.equals("1")) { 
-                System.out.println("Merci d'avoir utilisé notre service. Au revoir !");
-                break;
+                while (!input.matches("\\d+[+\\-*/]\\d+")) {
+                    System.out.println("Entrée invalide, réessayez :");
+                    input = scanner.nextLine().replaceAll("\\s+", "");
+                }
+
+                int nb1 = Integer.parseInt(input.split("[+\\-*/]")[0]);
+                int nb2 = Integer.parseInt(input.split("[+\\-*/]")[1]);
+                String operateur = input.replaceAll("\\d+", "");
+
+                Operation op = new Operation(nb1, nb2, operateur);
+
+                out.writeObject(op);
+                out.flush();
+
+                try {
+                    Integer result = (Integer) in.readObject();
+                    System.out.println("Résultat : " + result);
+                } catch (ClassNotFoundException e) {
+                    System.out.println("Réponse inattendue du serveur.");
+                }
+
+                System.out.println("Faire une autre opération ? (1 = oui / 2 = non)");
+                if (!scanner.nextLine().trim().equals("1")) {
+                    System.out.println("Fin du programme.");
+                    break;
+                }
             }
+
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-
-        socket.close();
-        scanner.close();
     }
-
-    static String effectuerOperation(Scanner scanner) {
-        System.out.println("Donnez l'opération à effectuer (ex: 5*3):");
-        String operation = scanner.nextLine();
-
-        while (!operation.matches("\\d+[+\\-*/]\\d+")) {
-            System.out.println("Opération invalide. Entrez une opération valide (ex: 5*3):");
-            operation = scanner.nextLine();
-        }
-
-        return operation;
-    }
-
-    static void envoyerOperation(String operation, Socket socket) throws IOException {
-        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-        out.writeUTF(operation);
-
-        DataInputStream in = new DataInputStream(socket.getInputStream());
-        int result = in.readInt();
-        System.out.println("Le résultat est : " + result);
-    }
-}
+}   

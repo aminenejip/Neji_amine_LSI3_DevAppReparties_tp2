@@ -1,66 +1,67 @@
 package serverPackage;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import operationPackage.Operation;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 
 public class Server {
     public static void main(String[] args) {
-        try {
-            ServerSocket serverSocket = new ServerSocket(12345);
-            System.out.println("Je suis un serveur en attente de la connexion d'un client...");
+        try (ServerSocket serverSocket = new ServerSocket(12345)) {
+            System.out.println("Serveur en attente d'un client...");
 
-            Socket socket = serverSocket.accept();
-            System.out.println("Un client est connecté");
+            try (Socket socket = serverSocket.accept()) {
+                System.out.println("Client connecté.");
 
-            DataInputStream in = new DataInputStream(socket.getInputStream());
-            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                
+                ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
+                out.flush();
+                ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            while (true) {
-                try {
-                    String operation = in.readUTF();
-                    if (operation.equalsIgnoreCase("exit")) break; // optionnel
+                while (true) {
+                    try {
+                        Object obj = in.readObject(); 
+                        if (!(obj instanceof Operation)) {
+                            System.out.println("Objet inattendu, on ignore.");
+                            continue;
+                        }
 
-                    operation = operation.replaceAll("\\s+", "");
-                    String[] parts = operation.split("[+\\-*/]");
-                    int nb1 = Integer.parseInt(parts[0]);
-                    int nb2 = Integer.parseInt(parts[1]);
-                    String operateur = operation.replaceAll("\\d+", "").trim();
+                        Operation op = (Operation) obj;
+                        int resultat = 0;
+                        switch (op.getOperateur()) {
+                            case "+": resultat = op.getNb1() + op.getNb2(); break;
+                            case "-": resultat = op.getNb1() - op.getNb2(); break;
+                            case "*": resultat = op.getNb1() * op.getNb2(); break;
+                            case "/":
+                                if (op.getNb2() != 0) {
+                                    resultat = op.getNb1() / op.getNb2(); // division entière
+                                } else {
+                                    System.out.println("Erreur : division par zéro");
+                                    resultat = 0;
+                                }
+                                break;
+                            default:
+                                System.out.println("Opérateur invalide: " + op.getOperateur());
+                        }
 
-                    int resultat = 0;
-                    switch (operateur) {
-                        case "+":
-                            resultat = nb1 + nb2;
-                            break;
-                        case "-":
-                            resultat = nb1 - nb2;
-                            break;
-                        case "*":
-                            resultat = nb1 * nb2;
-                            break;
-                        case "/":
-                            if (nb2 != 0)
-                                resultat = nb1 / nb2;
-                            else
-                                System.out.println("Erreur: Division par zéro");
-                            break;
-                        default:
-                            System.out.println("Opérateur invalide");
-                            break;
+                       
+                        out.writeObject(resultat);
+                        out.flush();
+
+                    } catch (EOFException e) {
+                        System.out.println("Client déconnecté.");
+                        break;
+                    } catch (StreamCorruptedException e) {
+                        System.out.println("Flux corrompu (probablement multiple headers). Fin de connexion.");
+                        break;
+                    } catch (ClassNotFoundException e) {
+                        System.out.println("Classe non trouvée: " + e.getMessage());
                     }
-
-                    out.writeInt(resultat);
-                    out.flush();
-                } catch (IOException e) {
-                    System.out.println("Le client s'est déconnecté.");
-                    break;
                 }
             }
 
-            socket.close();
-            serverSocket.close();
+            System.out.println("Serveur terminé.");
+
         } catch (IOException e) {
             e.printStackTrace();
         }
